@@ -1,0 +1,2 @@
+pid  = /run/stunnel.pid
+cert = /etc/stunnel.pem

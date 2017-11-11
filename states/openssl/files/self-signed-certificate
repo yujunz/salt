@@ -1,0 +1,61 @@
+#! /usr/bin/env python
+
+import atexit, os, shutil, socket, sys, tempfile
+from subprocess import Popen, PIPE
+
+cert_days         = 36500
+cert_type         = 'rsa:4096'
+cert_country      = 'US'
+cert_state        = 'Unknown'
+cert_city         = 'Unknown'
+cert_organization = 'N/A'
+cert_department   = 'N/A'
+cert_common_name  = socket.getfqdn()
+cert_email        = 'root@' + cert_common_name
+cert_input = [
+  cert_country,
+  cert_state,
+  cert_city,
+  cert_organization,
+  cert_department,
+  cert_common_name,
+  cert_email,
+]
+
+def run():
+    # Create our tempdir and register if for cleanup.
+    tempdir = tempfile.mkdtemp()
+    atexit.register( shutil.rmtree, tempdir )
+
+    # Create and open our fifo.
+    cert_fifo = tempdir + '/fifo'
+    try:
+        os.mkfifo( cert_fifo )
+    except OSError, e:
+        print "Failed to create FIFO: %s" % e
+        exit( 1 )
+    fifo = os.open( cert_fifo, os.O_RDONLY | os.O_NONBLOCK )
+
+    # Fire up our openssl command.
+    command = [
+        'openssl', 'req', '-x509', '-nodes', '-days', str( cert_days ),
+        '-newkey', cert_type, '-keyout', cert_fifo, '-out', cert_fifo,
+    ]
+    pipe = Popen( command, stdin = PIPE, stdout = PIPE, stderr = PIPE )
+    output, error = pipe.communicate( input = '\n'.join( cert_input ) + "\n" )
+
+    cert_data = []
+    while True:
+        data = os.read( fifo, 1024 )
+        if not data:
+            break
+        cert_data.append( data )
+
+    pipe.wait()
+    os.close( fifo )
+    return ''.join( cert_data )
+  
+if __name__ == '__main__':
+    print __grains__
+    exit()
+    print str( run() )
